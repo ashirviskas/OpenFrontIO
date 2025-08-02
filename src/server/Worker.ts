@@ -13,6 +13,7 @@ import {
   ClientMessageSchema,
   GameRecord,
   GameRecordSchema,
+  ID,
   ServerErrorMessage,
 } from "../core/Schemas";
 import { CreateGameInputSchema, GameInputSchema } from "../core/WorkerSchemas";
@@ -93,6 +94,13 @@ export async function startWorker() {
     "/api/create_game/:id",
     gatekeeper.httpHandler(LimiterType.Post, async (req, res) => {
       const id = req.params.id;
+      const creatorClientID = (() => {
+        if (typeof req.query.creatorClientID !== "string") return undefined;
+
+        const trimmed = req.query.creatorClientID.trim();
+        return ID.safeParse(trimmed).success ? trimmed : undefined;
+      })();
+
       if (!id) {
         log.warn(`cannot create game, id not found`);
         return res.status(400).json({ error: "Game ID is required" });
@@ -125,10 +133,11 @@ export async function startWorker() {
         return res.status(400).json({ error: "Worker, game id mismatch" });
       }
 
-      const game = gm.createGame(id, gc);
+      // Pass creatorClientID to createGame
+      const game = gm.createGame(id, gc, creatorClientID);
 
       log.info(
-        `Worker ${workerId}: IP ${ipAnonymize(clientIP)} creating game ${game.isPublic() ? "Public" : "Private"} with id ${id}`,
+        `Worker ${workerId}: IP ${ipAnonymize(clientIP)} creating ${game.isPublic() ? "Public" : "Private"}${gc?.gameMode ? ` ${gc.gameMode}` : ""} game with id ${id}${creatorClientID ? `, creator: ${creatorClientID}` : ""}`,
       );
       res.json(game.gameInfo());
     }),
